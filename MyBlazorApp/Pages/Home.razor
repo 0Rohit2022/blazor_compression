@@ -1,0 +1,116 @@
+﻿@* @page "/"
+
+<PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app. *@
+
+@page "/"
+@using Microsoft.AspNetCore.Components.Forms
+@using System.IO
+@using SixLabors.ImageSharp
+@using SixLabors.ImageSharp.Formats.Webp
+@using SixLabors.ImageSharp.Processing
+
+<div class="d-flex justify-content-center flex-column align-items-center">
+    @if (!string.IsNullOrEmpty(photoUploadModel.Base64String))
+    {
+        <div class="d-flex justify-content-center">
+            <div class="text-center mb-3 mt-3 d-flex flex-column">
+                <img src="@photoUploadModel.Base64String" class="img-thumbnail bg-black" alt="Profile Photo"
+                    style="max-width: 13rem; max-height: 13rem;" />
+            </div>
+        </div>
+    }
+
+    <div class="col-md-4">
+        <InputFile OnChange="@OnFileSelected" class="form-control" accept=".png, .jpeg, .jpg" />
+    </div>
+
+    @if (IsDisplayErrorMessage)
+    {
+        <div class="d-flex justify-content-center mb-3">
+            <label class="text-danger">@DisplayErrorMessage</label>
+        </div>
+    }
+</div>
+
+@code {
+    public class PhotoUploadModel
+    {
+        public string Base64String { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private PhotoUploadModel photoUploadModel = new();
+    private bool IsDisplayErrorMessage { get; set; }
+    private string? DisplayErrorMessage { get; set; }
+    private const long maxAllowedSizeInBytes = 20 * 1024 * 1024;
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        IsDisplayErrorMessage = false;
+        DisplayErrorMessage = string.Empty;
+        StateHasChanged();
+
+        var imageFile = e.File;
+        string? fileType = imageFile.ContentType;
+
+        if (imageFile != null && (fileType == "image/png" || fileType == "image/jpg" || fileType == "image/jpeg"))
+        {
+            try
+            {
+                if (imageFile.Size > maxAllowedSizeInBytes)
+                {
+                    DisplayErrorMessage = "File size must be less than 20MB.";
+                    IsDisplayErrorMessage = true;
+                    StateHasChanged();
+                    return;
+                }
+
+                // Load image into memory
+                using var image = await Image.LoadAsync(imageFile.OpenReadStream(maxAllowedSizeInBytes));
+
+                // Print original size of the image file
+                Console.WriteLine("Original Size of the image: " + imageFile.Size + " bytes");
+
+                // Process the image
+                var webpImageData = await ConvertToWebpAsync(image);
+
+                // Print the size of the WebP image
+                Console.WriteLine("Size of the WebP image: " + webpImageData.Length + " bytes");
+
+                // Convert the WebP image data to Base64 string
+                var base64Data = Convert.ToBase64String(webpImageData);
+                photoUploadModel.Base64String = $"data:image/webp;base64,{base64Data}";
+                photoUploadModel.Name = imageFile.Name;
+            }
+            catch (Exception ex)
+            {
+                DisplayErrorMessage = "An error occurred while uploading the file. Please try again.";
+                IsDisplayErrorMessage = true;
+            }
+            finally
+            {
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            DisplayErrorMessage = "Please upload a PNG, JPG, or JPEG image.";
+            IsDisplayErrorMessage = true;
+            StateHasChanged();
+        }
+    }
+
+    static async Task<byte[]> ConvertToWebpAsync(Image image)
+    {
+        using (var outputStream = new MemoryStream())
+        {
+            // Save the image as WebP to the memory stream
+            await image.SaveAsWebpAsync(outputStream);
+            return outputStream.ToArray();
+        }
+    }
+}
