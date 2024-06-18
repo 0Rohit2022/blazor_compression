@@ -1,17 +1,9 @@
-﻿@* @page "/"
-
-<PageTitle>Home</PageTitle>
-
-<h1>Hello, world!</h1>
-
-Welcome to your new app. *@
-
-@page "/"
+﻿@page "/com"
 @using Microsoft.AspNetCore.Components.Forms
-@using System.IO
 @using SixLabors.ImageSharp
 @using SixLabors.ImageSharp.Formats.Webp
 @using SixLabors.ImageSharp.Processing
+@using System.IO
 
 <div class="d-flex justify-content-center flex-column align-items-center">
     @if (!string.IsNullOrEmpty(photoUploadModel.Base64String))
@@ -27,13 +19,6 @@ Welcome to your new app. *@
     <div class="col-md-4">
         <InputFile OnChange="@OnFileSelected" class="form-control" accept=".png, .jpeg, .jpg" />
     </div>
-
-    @if (IsDisplayErrorMessage)
-    {
-        <div class="d-flex justify-content-center mb-3">
-            <label class="text-danger">@DisplayErrorMessage</label>
-        </div>
-    }
 </div>
 
 @code {
@@ -69,24 +54,21 @@ Welcome to your new app. *@
                     return;
                 }
 
-                // Load image into memory
-                using var image = await Image.LoadAsync(imageFile.OpenReadStream(maxAllowedSizeInBytes));
+                // Optimize image before upload
+                var optimizedImageStream = await OptimizeImageAsync(imageFile);
 
-                // Print original size of the image file
-                Console.WriteLine("Original Size of the image: " + imageFile.Size + " bytes");
+                // Load image into memory
+                using var image = await Image.LoadAsync(optimizedImageStream);
 
                 // Process the image
                 var webpImageData = await ConvertToWebpAsync(image);
-
-                // Print the size of the WebP image
-                Console.WriteLine("Size of the WebP image: " + webpImageData.Length + " bytes");
 
                 // Convert the WebP image data to Base64 string
                 var base64Data = Convert.ToBase64String(webpImageData);
                 photoUploadModel.Base64String = $"data:image/webp;base64,{base64Data}";
                 photoUploadModel.Name = imageFile.Name;
             }
-            catch (Exception ex)
+            catch
             {
                 DisplayErrorMessage = "An error occurred while uploading the file. Please try again.";
                 IsDisplayErrorMessage = true;
@@ -104,12 +86,36 @@ Welcome to your new app. *@
         }
     }
 
+    private async Task<Stream> OptimizeImageAsync(IBrowserFile imageFile)
+    {
+        var maxWidth = 1920; // Example max width
+        var maxHeight = 1080; // Example max height
+
+        using var stream = imageFile.OpenReadStream(maxAllowedSizeInBytes);
+        using var image = await Image.LoadAsync(stream);
+
+        var resizeOptions = new ResizeOptions
+            {
+                Mode = ResizeMode.Max,
+                Size = new Size(maxWidth, maxHeight)
+            };
+
+        image.Mutate(x => x.Resize(resizeOptions));
+
+        var outputStream = new MemoryStream();
+        await image.SaveAsJpegAsync(outputStream);
+        outputStream.Position = 0; // Reset the stream position for further reading
+
+        return outputStream;
+    }
+
     static async Task<byte[]> ConvertToWebpAsync(Image image)
     {
         using (var outputStream = new MemoryStream())
         {
-            // Save the image as WebP to the memory stream
             await image.SaveAsWebpAsync(outputStream);
+            Console.WriteLine("test");
+            Console.WriteLine(outputStream.Length / 1024.0);
             return outputStream.ToArray();
         }
     }
